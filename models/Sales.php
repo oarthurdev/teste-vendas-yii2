@@ -31,13 +31,26 @@ class Sales extends \yii\db\ActiveRecord
     {
         return [
             [['product_id', 'user_id', 'quantity', 'total_price', 'installments', 'sale_date'], 'required'],
-            [['product_id', 'user_id', 'quantity', 'installments'], 'integer'],
+            [['user_id', 'installments'], 'integer'],
+            [['product_id', 'quantity'], 'each', 'rule' => ['integer']],
             [['sale_date', 'description'], 'safe'],
             [['total_price'], 'validatePrice'],
             [['installmentValues'], 'safe'],
             [['installmentValues'], 'each', 'rule' => ['number']],
-            ['installmentValues', 'validateInstallmentValues'],
+            [['installmentValues'], 'validateInstallmentValues'],
         ];
+    }
+
+    public function calculateTotalPrice()
+    {
+        $total = 0;
+        foreach ($this->product_id as $index => $productId) {
+            $product = Product::findOne($productId);
+            if ($product) {
+                $total += $product->price * $this->quantity[$index];
+            }
+        }
+        $this->total_price = $total;
     }
 
     public function saveInstallments()
@@ -61,6 +74,17 @@ class Sales extends \yii\db\ActiveRecord
         return $this->hasOne(Product::class, ['id' => 'product_id']);
     }
 
+    public function getProducts()
+    {
+        return $this->hasMany(Product::class, ['id' => 'product_id'])
+            ->via('salesProducts'); // Nome da função que define a relação com a tabela de junção
+    }
+
+    public function getSalesProducts()
+    {
+        return $this->hasMany(SalesProducts::class, ['sales_id' => 'id']);
+    }
+
     public function getUser()
     {
         return $this->hasOne(User::class, ['id' => 'user_id']);
@@ -68,9 +92,15 @@ class Sales extends \yii\db\ActiveRecord
 
     public function validateInstallmentValues($attribute, $params)
     {
-        $totalInstallmentsValue = array_sum($this->installmentValues);
-        if ($totalInstallmentsValue != $this->total_price) {
-            $this->addError($attribute, 'A soma dos valores das parcelas deve ser igual ao valor total da venda.');
+        // Obtém o valor total da venda
+        $totalPrice = $this->total_price;
+
+        // Calcula o total das parcelas
+        $totalInstallments = array_sum($this->installmentValues);
+
+        // Verifica se o total das parcelas é igual ao total da venda
+        if ($totalInstallments != $totalPrice) {
+            $this->addError($attribute, 'O total das parcelas deve ser igual ao valor total da venda.');
         }
     }
 
@@ -82,16 +112,7 @@ class Sales extends \yii\db\ActiveRecord
         
         return null;
     }
-
-    public function beforeSave($insert)
-    {
-        if (parent::beforeSave($insert)) {
-            $this->total_price = $this->product->price * $this->quantity; // Multiplica o preço do produto pela quantidade
-            return true;
-        }
-        return false;
-    }
-
+    
     /**
      * Gets query for [[Installments]].
      *

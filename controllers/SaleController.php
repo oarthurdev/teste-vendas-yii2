@@ -43,7 +43,27 @@ class SaleController extends Controller
         $model = new Sales();
 
         if ($model->load(Yii::$app->request->post())) {
+            $model->calculateTotalPrice();
+            
             if ($model->save()) {
+                // Salvar os produtos na tabela sales_product
+                $productIds = Yii::$app->request->post('Sales')['product_id'] ?? [];
+                $quantities = Yii::$app->request->post('Sales')['quantity'] ?? [];
+
+                // Itera sobre os produtos e suas quantidades
+                foreach ($productIds as $index => $productId) {
+                    $quantity = $quantities[$index] ?? 0;
+                    
+                    if ($productId && $quantity > 0) {
+                        // Salva o registro na tabela sales_product
+                        Yii::$app->db->createCommand()->insert('sales_products', [
+                            'sales_id' => $model->id,
+                            'product_id' => $productId,
+                            'quantity' => $quantity,
+                        ])->execute();
+                    }
+                }
+
                 return $this->redirect(['index', 'id' => $model->id]);
             }
         }
@@ -54,6 +74,7 @@ class SaleController extends Controller
             'users' => User::find()->select(['name', 'id'])->indexBy('id')->column(),
         ]);
     }
+
 
 
     public function actionIndex()
@@ -75,19 +96,64 @@ class SaleController extends Controller
     public function actionUpdate($id)
     {
         $model = Sales::findOne($id);
+        
+        if (!$model) {
+            throw new NotFoundHttpException('A venda solicitada não existe.');
+        }
 
-        $products = \app\models\Product::find()->select('name')->indexBy('id')->column();
-        $users = \app\models\User::find()->select('name')->indexBy('id')->column();
+        $currentProducts = Yii::$app->db->createCommand('SELECT * FROM sales_products WHERE sales_id = :sales_id')
+            ->bindValue(':sales_id', $model->id)
+            ->queryAll();
+
+        $products = Product::find()->select('name')->indexBy('id')->column();
+        $users = User::find()->select('name')->indexBy('id')->column();
 
         if ($model->load(Yii::$app->request->post()) && $model->save()) {
+
+            $productIds = Yii::$app->request->post('Sales')['product_id'] ?? [];
+            $quantities = Yii::$app->request->post('Sales')['quantity'] ?? [];
+
+            foreach ($currentProducts as $currentProduct) {
+                if (!in_array($currentProduct['product_id'], $productIds)) {
+                    Yii::$app->db->createCommand()
+                        ->delete('sales_products', ['sales_id' => $model->id, 'product_id' => $currentProduct['product_id']])
+                        ->execute();
+                }
+            }
+
+            foreach ($productIds as $index => $productId) {
+                $quantity = $quantities[$index] ?? 0;
+                
+                if ($productId && $quantity > 0) {
+                    $existingProduct = Yii::$app->db->createCommand('SELECT * FROM sales_products WHERE sales_id = :sales_id AND product_id = :product_id')
+                        ->bindValue(':sales_id', $model->id)
+                        ->bindValue(':product_id', $productId)
+                        ->queryOne();
+
+                    if ($existingProduct) {
+                        Yii::$app->db->createCommand()
+                            ->update('sales_products', ['quantity' => $quantity], ['sales_id' => $model->id, 'product_id' => $productId])
+                            ->execute();
+                    } else {
+                        Yii::$app->db->createCommand()->insert('sales_products', [
+                            'sales_id' => $model->id,
+                            'product_id' => $productId,
+                            'quantity' => $quantity,
+                        ])->execute();
+                    }
+                }
+            }
+
             return $this->redirect(['index']);
         }
 
         return $this->render('update', [
             'model' => $model,
             'products' => $products,
-            'users' => $users,]);
+            'users' => $users,
+        ]);
     }
+
 
     public function actionDelete($id)
     {

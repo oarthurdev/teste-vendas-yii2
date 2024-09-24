@@ -2,6 +2,8 @@
 use yii\helpers\Html;
 use yii\grid\GridView;
 use yii\widgets\Pjax;
+use app\models\Product;
+use app\models\User;
 
 $this->title = 'Vendas';
 $this->params['breadcrumbs'][] = $this->title;
@@ -11,6 +13,10 @@ $this->registerCssFile('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.
 $this->registerJsFile('@web/js/confirm-delete.js', ['depends' => [\yii\web\JqueryAsset::class]]);
 $this->registerJsFile('@web/js/delete-multiple.js', ['depends' => [\yii\web\JqueryAsset::class]]);
 $this->registerJsFile('@web/js/export-pdf.js', ['depends' => [\yii\web\JqueryAsset::class]]);
+
+$products = Product::find()->all();
+$users = User::find()->all();
+
 ?>
 
 <div class="sales-index">
@@ -38,11 +44,12 @@ $this->registerJsFile('@web/js/export-pdf.js', ['depends' => [\yii\web\JqueryAss
             'disabled' => true,
         ]) ?>
     </div>
+
     <?= GridView::widget([
         'id' => 'w0',
         'dataProvider' => $dataProvider,
         'filterModel' => null,
-        'options' => ['class' => 'table-responsive'], // Adicionando classe para responsividade
+        'options' => ['class' => 'table-responsive'],
         'columns' => [
             ['class' => 'yii\grid\SerialColumn'],
             [
@@ -56,20 +63,23 @@ $this->registerJsFile('@web/js/export-pdf.js', ['depends' => [\yii\web\JqueryAss
                 ]),
             ],
             [
-                'attribute' => 'product.name',
-                'label' => 'Produto',
-                'value' => function($model) {
-                    return $model->product->name;
-                },
-            ],
-            [
                 'attribute' => 'user.name',
                 'label' => 'Vendedor',
                 'value' => function($model) {
                     return $model->user->name;
                 },
             ],
-            'quantity',
+            [
+                'label' => 'Produto / Quantidade',
+                'format' => 'raw',
+                'value' => function($model) {
+                    $productList = '';
+                    foreach ($model->products as $product) {
+                        $productList .= Html::tag('div', $product->name . ' / ' . $product->quantity, ['class' => 'product-item']);
+                    }
+                    return $productList;
+                },
+            ],
             'total_price',
             'sale_date',
             [
@@ -136,6 +146,13 @@ $this->registerJsFile('@web/js/export-pdf.js', ['depends' => [\yii\web\JqueryAss
     .btn {
         flex: 1;
         min-width: 150px;
+    }
+
+    .product-item {
+        padding: 5px;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        margin: 2px 0;
     }
 
     @media (max-width: 768px) {

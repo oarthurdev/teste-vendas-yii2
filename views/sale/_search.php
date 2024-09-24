@@ -2,6 +2,8 @@
 
 use yii\helpers\Html;
 use yii\widgets\ActiveForm;
+use app\models\Product;
+use app\models\User;
 
 /* @var $this yii\web\View */
 /* @var $model app\models\SalesSearch */
@@ -20,11 +22,21 @@ use yii\widgets\ActiveForm;
 
     <div class="row">
         <div class="col-md-4">
-            <?= $form->field($model, 'product_id')->dropDownList($products, ['prompt' => 'Selecione um Produto'])->label('Produto') ?>
+        <?php
+
+        $products = Product::find()->all();
+        $productList = \yii\helpers\ArrayHelper::map($products, 'id', 'name'); // Converte a lista de produtos
+
+        $users = Product::find()->all();
+        $usersList = \yii\helpers\ArrayHelper::map($users, 'id', 'name'); // Converte a lista de produtos
+        ?>
+
+        <?= $form->field($model, 'product_id')->dropDownList($productList, ['prompt' => 'Selecione um Produto'])->label('Produto') ?>
+
         </div>
 
         <div class="col-md-4">
-            <?= $form->field($model, 'user_id')->dropDownList($users, ['prompt' => 'Selecione um Usuário'])->label('Usuário') ?>
+            <?= $form->field($model, 'user_id')->dropDownList($usersList, ['prompt' => 'Selecione um Usuário'])->label('Usuário') ?>
         </div>
 
         <div class="col-md-4">

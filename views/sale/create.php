@@ -13,18 +13,16 @@ $this->params['breadcrumbs'][] = $this->title;
 $this->registerJsFile('https://cdnjs.cloudflare.com/ajax/libs/jquery.inputmask/5.0.6/jquery.inputmask.min.js', ['depends' => [\yii\web\JqueryAsset::class]]);
 
 // Script para máscara de preço
-$this->registerJs("
-    $(document).ready(function() {
-        $('#sales-total_price').inputmask('decimal', {
-            radixPoint: '.',
-            groupSeparator: ',',
-            digits: 2,
-            autoGroup: true,
-            prefix: '$ ',
-            placeholder: '0.00'
-        });
+$this->registerJs("$(document).ready(function() {
+    $('#sales-total_price').inputmask('decimal', {
+        radixPoint: '.',
+        groupSeparator: ',',
+        digits: 2,
+        autoGroup: true,
+        prefix: '$ ',
+        placeholder: '0.00'
     });
-");
+});");
 
 $products = Product::find()->all();
 $users = User::find()->all();
@@ -34,21 +32,51 @@ $users = User::find()->all();
 
     <?php $form = ActiveForm::begin(); ?>
 
-    <?= $form->field($model, 'product_id')->dropDownList(
-        ArrayHelper::map($products, 'id', 'name'), 
-        ['prompt' => 'Selecione um Produto', 'id' => 'product-select']
-    ) ?>
+    <div class="form-group">
+        <?= $form->field($model, 'user_id')->label("Vendedor")->dropDownList(
+            ArrayHelper::map($users, 'id', 'name'), 
+            ['prompt' => 'Selecione um Usuário']
+        ) ?>
+    </div>
 
-    <?= $form->field($model, 'user_id')->dropDownList(
-        ArrayHelper::map($users, 'id', 'name'), 
-        ['prompt' => 'Selecione um Usuário']
-    ) ?>
+    <div id="product-list">
+        <h4>Produtos</h4>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Produto</th>
+                    <th>Quantidade</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="product-items">
+                <tr class="product-item">
+                    <td>
+                        <?= $form->field($model, 'product_id[]')->dropDownList(
+                            ArrayHelper::map($products, 'id', 'name'), 
+                            ['prompt' => 'Selecione um Produto']
+                        )->label(false) ?>
+                    </td>
+                    <td>
+                        <?= $form->field($model, 'quantity[]')->textInput(['type' => 'number', 'min' => 1])->label(false) ?>
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-danger remove-product">Remover</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 
-    <?= $form->field($model, 'quantity')->textInput(['id' => 'quantity-input', 'type' => 'number', 'min' => 1]) ?>
+    <button type="button" id="add-product" class="btn btn-secondary">Adicionar Produto</button>
 
-    <?= $form->field($model, 'total_price')->textInput(['id' => 'total-price-input']) ?>
+    <div class="form-group">
+        <?= $form->field($model, 'total_price')->textInput(['id' => 'total-price-input', 'readonly' => true]) ?>
+    </div>
 
-    <?= $form->field($model, 'installments')->textInput(['type' => 'number', 'min' => 1, 'id' => 'installments-input']) ?>
+    <div class="form-group">
+        <?= $form->field($model, 'installments')->textInput(['type' => 'number', 'min' => 1, 'id' => 'installments-input']) ?>
+    </div>
 
     <div id="installment-fields"></div>
 
@@ -77,37 +105,77 @@ $users = User::find()->all();
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        var productSelect = document.getElementById('product-select');
-        var quantityInput = document.getElementById('quantity-input');
         var totalPriceInput = document.getElementById('total-price-input');
+        var productItems = document.getElementById('product-items');
         var installmentsInput = document.getElementById('installments-input');
         var installmentFields = document.getElementById('installment-fields');
 
-        // Verifica se os elementos existem antes de adicionar event listeners
-        if (productSelect && quantityInput && totalPriceInput) {
-            var productPrices = <?= json_encode(ArrayHelper::map($products, 'id', 'price')) ?>;
+        function updateTotalPrice() {
+            var totalPrice = 0;
 
-            function updateTotalPrice() {
-                var productId = productSelect.value;
-                var quantity = quantityInput.value;
-                var price = productPrices[productId] || 0;
-                var totalPrice = quantity * price;
-                totalPriceInput.value = totalPrice.toFixed(2);
+            var productElements = productItems.getElementsByClassName('product-item');
+            for (var i = 0; i < productElements.length; i++) {
+                var productId = productElements[i].querySelector('select[name="Sales[product_id][]"]').value;
+                var quantity = productElements[i].querySelector('input[name="Sales[quantity][]"]').value;
+                var price = <?= json_encode(ArrayHelper::map($products, 'id', 'price')) ?>[productId] || 0;
+                totalPrice += quantity * price;
             }
 
-            productSelect.addEventListener('change', updateTotalPrice);
-            quantityInput.addEventListener('input', updateTotalPrice);
+            totalPriceInput.value = totalPrice.toFixed(2);
+            updateInstallments();
         }
 
-        // Adiciona evento para a mudança do número de parcelas
-        if (installmentsInput) {
-            installmentsInput.addEventListener('change', function() {
-                var count = parseInt(this.value);
-                installmentFields.innerHTML = '';
-                for (var i = 0; i < count; i++) {
-                    installmentFields.innerHTML += '<div class=\"form-group\"><label>Installment ' + (i + 1) + '</label><input type=\"number\" name=\"Sales[installmentValues][' + i + ']\" class=\"form-control\" step=\"0.01\" required></div>';
-                }
-            });
+        function updateInstallments() {
+            var totalPrice = parseFloat(totalPriceInput.value.replace('$ ', '').replace(',', '')) || 0;
+            var installmentsCount = parseInt(installmentsInput.value) || 0;
+            var installmentAmount = (installmentsCount > 0) ? (totalPrice / installmentsCount).toFixed(2) : 0;
+
+            // Limpa os campos de parcelas
+            installmentFields.innerHTML = '';
+            for (var i = 0; i < installmentsCount; i++) {
+                installmentFields.innerHTML += `<div class="form-group">
+                    <label>Parcelamento ${i + 1}</label>
+                    <input type="number" name="Sales[installmentValues][]" class="form-control" value="${installmentAmount}" required>
+                </div>`;
+            }
         }
+
+        productItems.addEventListener('change', updateTotalPrice);
+
+        document.getElementById('add-product').addEventListener('click', function() {
+            var newProductRow = document.createElement('tr');
+            newProductRow.className = 'product-item';
+            newProductRow.innerHTML = `
+                <td>
+                    <?= $form->field($model, 'product_id[]')->dropDownList(ArrayHelper::map($products, 'id', 'name'), ['prompt' => 'Selecione um Produto'])->label(false) ?>
+                </td>
+                <td>
+                    <?= $form->field($model, 'quantity[]')->textInput(['type' => 'number', 'min' => 1])->label(false) ?>
+                </td>
+                <td>
+                    <button type="button" class="btn btn-danger remove-product">Remover</button>
+                </td>
+            `;
+            productItems.appendChild(newProductRow);
+
+            newProductRow.addEventListener('change', updateTotalPrice);
+
+            newProductRow.querySelector('.remove-product').addEventListener('click', function() {
+                productItems.removeChild(newProductRow);
+                updateTotalPrice();
+            });
+        });
+
+        if (installmentsInput) {
+            installmentsInput.addEventListener('change', updateInstallments);
+        }
+
+        document.querySelectorAll('.remove-product').forEach(function(button) {
+            button.addEventListener('click', function() {
+                var row = this.closest('tr');
+                productItems.removeChild(row);
+                updateTotalPrice();
+            });
+        });
     });
 </script>
